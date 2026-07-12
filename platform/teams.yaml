@@ -1,0 +1,7 @@
+teams:
+  - name: payments-team
+    slack: "#payments"
+  - name: platform-team
+    slack: "#platform"
+  - name: checkout-team
+    slack: "#checkout"

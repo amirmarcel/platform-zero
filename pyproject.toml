@@ -9,15 +9,15 @@ description = "CLI for the platform-zero internal developer platform"
 requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [project.scripts]
 platformctl = "platformctl.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/platformctl"]
-
-[dependency-groups]
-dev = [
-    "pytest>=8.0",
-]
