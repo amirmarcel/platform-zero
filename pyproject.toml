@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "platformctl"
+version = "0.1.0"
+description = "CLI for the platform-zero internal developer platform"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+]
+
+[project.scripts]
+platformctl = "platformctl.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/platformctl"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
