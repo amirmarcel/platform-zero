@@ -1,6 +1,12 @@
 import re
+from pathlib import Path
 
-from platformctl.render import render_grafana_dashboard, render_prometheus_rules
+from platformctl.render import (
+    find_orphaned_artifacts,
+    prune_orphaned_artifacts,
+    render_grafana_dashboard,
+    render_prometheus_rules,
+)
 from platformctl.schema import ServiceManifest
 
 from conftest import valid_manifest
@@ -109,3 +115,73 @@ def test_job_selector_and_group_name_keep_the_raw_hyphenated_name() -> None:
     assert rules["groups"][0]["name"] == "demo-api.rules"
     recordings, _ = _rules_by_kind(rules)
     assert 'job="demo-api"' in recordings[0]["expr"]
+
+
+# Orphaned artifacts: a derived artifact with no corresponding service must
+# be detected (and, on request, pruned) — see docs/service-contract.md rule 10.
+
+
+def _write(path: Path, content: str = "x\n") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
+def test_find_orphaned_artifacts_empty_when_all_artifacts_have_a_service(tmp_path: Path) -> None:
+    _write(tmp_path / "helm" / "service" / "values" / "checkout-api.yaml")
+    _write(tmp_path / "argocd" / "apps" / "checkout-api.yaml")
+    _write(tmp_path / "observability" / "rules" / "checkout-api.yaml")
+    _write(tmp_path / "observability" / "dashboards" / "checkout-api.json")
+
+    assert find_orphaned_artifacts(tmp_path, {"checkout-api"}) == []
+
+
+def test_find_orphaned_artifacts_detects_all_four_kinds_for_a_deleted_service(tmp_path: Path) -> None:
+    _write(tmp_path / "helm" / "service" / "values" / "checkout-api.yaml")
+    _write(tmp_path / "argocd" / "apps" / "checkout-api.yaml")
+    _write(tmp_path / "observability" / "rules" / "checkout-api.yaml")
+    _write(tmp_path / "observability" / "dashboards" / "checkout-api.json")
+
+    orphaned = find_orphaned_artifacts(tmp_path, service_names=set())
+
+    assert set(orphaned) == {
+        "helm/service/values/checkout-api.yaml",
+        "argocd/apps/checkout-api.yaml",
+        "observability/rules/checkout-api.yaml",
+        "observability/dashboards/checkout-api.json",
+    }
+
+
+def test_find_orphaned_artifacts_ignores_observability_application(tmp_path: Path) -> None:
+    _write(tmp_path / "argocd" / "apps" / "observability.yaml")
+
+    assert find_orphaned_artifacts(tmp_path, service_names=set()) == []
+
+
+def test_find_orphaned_artifacts_leaves_artifacts_for_surviving_services_alone(tmp_path: Path) -> None:
+    _write(tmp_path / "helm" / "service" / "values" / "checkout-api.yaml")
+    _write(tmp_path / "helm" / "service" / "values" / "billing-worker.yaml")
+
+    orphaned = find_orphaned_artifacts(tmp_path, service_names={"checkout-api"})
+
+    assert orphaned == ["helm/service/values/billing-worker.yaml"]
+
+
+def test_prune_orphaned_artifacts_deletes_them_and_returns_their_paths(tmp_path: Path) -> None:
+    _write(tmp_path / "helm" / "service" / "values" / "checkout-api.yaml")
+    _write(tmp_path / "argocd" / "apps" / "checkout-api.yaml")
+
+    removed = prune_orphaned_artifacts(tmp_path, service_names=set())
+
+    assert set(removed) == {"helm/service/values/checkout-api.yaml", "argocd/apps/checkout-api.yaml"}
+    assert not (tmp_path / "helm" / "service" / "values" / "checkout-api.yaml").exists()
+    assert not (tmp_path / "argocd" / "apps" / "checkout-api.yaml").exists()
+
+
+def test_prune_orphaned_artifacts_does_not_touch_files_for_existing_services(tmp_path: Path) -> None:
+    kept = tmp_path / "helm" / "service" / "values" / "checkout-api.yaml"
+    _write(kept)
+
+    removed = prune_orphaned_artifacts(tmp_path, service_names={"checkout-api"})
+
+    assert removed == []
+    assert kept.exists()

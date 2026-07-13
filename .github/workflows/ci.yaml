@@ -170,3 +170,23 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      # terraform/ is reference infrastructure, never applied — see
+      # terraform/README.md. This only checks that it's internally
+      # consistent, well-formatted HCL for the `aws` provider; there is no
+      # plan/apply step and no AWS credentials available to this workflow.
+      - name: Check Terraform formatting
+        working-directory: terraform
+        run: terraform fmt -check -recursive
+
+      - name: Initialize Terraform (no backend, no credentials)
+        working-directory: terraform
+        run: terraform init -backend=false
+
+      - name: Validate Terraform
+        working-directory: terraform
+        run: terraform validate

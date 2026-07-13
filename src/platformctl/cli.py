@@ -7,7 +7,14 @@ import yaml
 
 from platformctl.cluster import KubectlError
 from platformctl.config import get_argocd_repo_url, load_config
-from platformctl.render import check_drift, render_artifacts, render_observability_artifact, write_artifacts
+from platformctl.render import (
+    check_drift,
+    find_orphaned_artifacts,
+    prune_orphaned_artifacts,
+    render_artifacts,
+    render_observability_artifact,
+    write_artifacts,
+)
 from platformctl.schema import NAME_MAX_LENGTH, NAME_PATTERN
 from platformctl.status import fetch_active_alerts, get_service_status
 from platformctl.teams import InvalidTeamNameError, load_teams
@@ -80,6 +87,17 @@ def _resolve_service_targets(name: Optional[str], services_dir: Path) -> list[Pa
         typer.echo(f"error: {services_dir} not found", err=True)
         raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
     return sorted(p for p in services_dir.iterdir() if p.is_dir() and (p / "service.yaml").is_file())
+
+
+def _all_service_names(services_dir: Path) -> set[str]:
+    """Every service currently declared under services/, by directory name —
+    the set an artifact must belong to in order not to be orphaned.
+    Independent of any --check/--prune target filter: a service not being
+    rendered this invocation is still a service that exists.
+    """
+    if not services_dir.is_dir():
+        return set()
+    return {p.name for p in services_dir.iterdir() if p.is_dir() and (p / "service.yaml").is_file()}
 
 
 @app.command()
@@ -200,12 +218,32 @@ def render(
         "--check",
         help="Render to memory and fail if the on-disk artifacts differ, without writing (drift check).",
     ),
+    prune: bool = typer.Option(
+        False,
+        "--prune",
+        help="Delete derived artifacts with no corresponding services/<name>/service.yaml, then exit.",
+    ),
 ) -> None:
     """Generate Helm values, ArgoCD Application, Prometheus rules, and Grafana dashboard."""
+    if check and prune:
+        typer.echo("error: --check and --prune are mutually exclusive", err=True)
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+
+    services_dir = root / "services"
+
+    if prune:
+        removed = prune_orphaned_artifacts(root, _all_service_names(services_dir))
+        if removed:
+            typer.echo("pruned:")
+            for rel_path in removed:
+                typer.echo(f"  - {rel_path}")
+        else:
+            typer.echo("no orphaned artifacts")
+        raise typer.Exit(code=0)
+
     teams = _load_teams_or_exit(root / "platform" / "teams.yaml")
     config = _load_config_or_exit(root / "platform" / "config.yaml")
     repo_url = get_argocd_repo_url(config)
-    services_dir = root / "services"
     targets = _resolve_service_targets(name, services_dir)
 
     any_invalid = False
@@ -252,6 +290,14 @@ def render(
         else:
             write_artifacts(root, artifacts)
             typer.echo(f"rendered {target.name}")
+
+    if check:
+        orphaned = find_orphaned_artifacts(root, _all_service_names(services_dir))
+        if orphaned:
+            any_drift = True
+            typer.echo("ORPHAN")
+            for rel_path in orphaned:
+                typer.echo(f"  - {rel_path}")
 
     if any_invalid or (check and any_drift):
         raise typer.Exit(code=VALIDATION_FAILURE_EXIT_CODE)

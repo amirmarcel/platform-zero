@@ -17,10 +17,19 @@
 11 | name is a valid RFC 1123 label, <=53 chars | schema.ServiceManifest.name (Field pattern + max_length)
 12 | owning team is a valid label value        | teams.load_teams (raises InvalidTeamNameError)
 13 | availability SLO is strictly in (0, 100)  | schema.Slo.availability (Field gt/lt)
+14 | services/<dir> directory name matches manifest.name | validate_directory_name (this module)
 
 Rules 7 and 10 are satisfied structurally by the render/CI pipeline, not by
 anything `validate` can check from the manifest alone, so there is nothing
 for `validate` to enforce for them until `render` exists.
+
+Rule 14 exists because services are *resolved* by directory name (see
+cli.py's `_resolve_service_targets`) but derived artifacts are *written*
+using `manifest.name` (see render.py's `artifact_paths`). Without this
+check, a `services/foo/service.yaml` declaring `name: bar` would validate
+fine on its own, silently render to `bar.yaml`, and leave `render --check`
+with nothing under the `foo` directory to compare against — the divergence
+is invisible until something looks for `foo` and finds `bar` instead.
 """
 
 import re
@@ -100,6 +109,21 @@ def validate_runbook_exists(manifest: ServiceManifest, root: Path) -> list[str]:
     return []
 
 
+def validate_directory_name(manifest: ServiceManifest, manifest_path: Path) -> list[str]:
+    """Rule 14: the services/<dir> directory a manifest lives in must match
+    manifest.name — services are resolved by directory but derived
+    artifacts are written using manifest.name, so a mismatch here means the
+    two silently diverge.
+    """
+    directory_name = manifest_path.parent.name
+    if directory_name != manifest.name:
+        return [
+            f"directory 'services/{directory_name}' does not match manifest name "
+            f"'{manifest.name}' (services/<dir>/service.yaml's name field must equal <dir>)"
+        ]
+    return []
+
+
 def validate_manifest(
     manifest_path: Path, teams: set[str], root: Path
 ) -> tuple[ServiceManifest | None, list[str]]:
@@ -126,5 +150,6 @@ def validate_manifest(
         *validate_image_tag(manifest),
         *validate_resource_limits(manifest),
         *validate_runbook_exists(manifest, root),
+        *validate_directory_name(manifest, manifest_path),
     ]
     return manifest, errors

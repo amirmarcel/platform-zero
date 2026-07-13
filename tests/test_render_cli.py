@@ -148,3 +148,96 @@ def test_render_refuses_invalid_manifest(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert "INVALID checkout-api" in result.output
     assert not (root / "helm" / "service" / "values" / "checkout-api.yaml").exists()
+
+
+# Orphaned artifacts: a deleted services/<name>/service.yaml must not leave
+# its derived artifacts undetected by --check.
+
+
+def _delete_service(root: Path, name: str) -> None:
+    import shutil
+
+    shutil.rmtree(root / "services" / name)
+
+
+def test_render_check_fails_when_service_deleted_leaves_orphaned_artifacts(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+    runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+    _delete_service(root, "checkout-api")
+
+    result = runner.invoke(app, ["render", "--check", "--root", str(root)])
+
+    assert result.exit_code == 1
+    assert "ORPHAN" in result.output
+    assert "helm/service/values/checkout-api.yaml" in result.output
+    assert "argocd/apps/checkout-api.yaml" in result.output
+    assert "observability/rules/checkout-api.yaml" in result.output
+    assert "observability/dashboards/checkout-api.json" in result.output
+
+
+def test_render_check_does_not_flag_observability_application_as_orphan(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+    runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+    _delete_service(root, "checkout-api")
+
+    result = runner.invoke(app, ["render", "--check", "--root", str(root)])
+
+    assert result.exit_code == 1
+    assert "argocd/apps/observability.yaml" not in result.output
+
+
+def test_render_check_clean_when_no_orphans(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+    runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+
+    result = runner.invoke(app, ["render", "--check", "--root", str(root)])
+
+    assert result.exit_code == 0
+    assert "ORPHAN" not in result.output
+
+
+def test_render_prune_removes_orphaned_artifacts(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+    runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+    _delete_service(root, "checkout-api")
+
+    result = runner.invoke(app, ["render", "--prune", "--root", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "helm/service/values/checkout-api.yaml" in result.output
+    assert not (root / "helm" / "service" / "values" / "checkout-api.yaml").exists()
+    assert not (root / "argocd" / "apps" / "checkout-api.yaml").exists()
+    assert not (root / "observability" / "rules" / "checkout-api.yaml").exists()
+    assert not (root / "observability" / "dashboards" / "checkout-api.json").exists()
+
+    # a subsequent --check is clean: nothing left to flag as an orphan.
+    result = runner.invoke(app, ["render", "--check", "--root", str(root)])
+    assert result.exit_code == 0, result.output
+
+
+def test_render_prune_does_not_remove_observability_application(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+    runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+    _delete_service(root, "checkout-api")
+
+    runner.invoke(app, ["render", "--prune", "--root", str(root)])
+
+    assert (root / "argocd" / "apps" / "observability.yaml").exists()
+
+
+def test_render_prune_reports_when_nothing_to_prune(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+    runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+
+    result = runner.invoke(app, ["render", "--prune", "--root", str(root)])
+
+    assert result.exit_code == 0
+    assert "no orphaned artifacts" in result.output
+
+
+def test_render_check_and_prune_are_mutually_exclusive(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+
+    result = runner.invoke(app, ["render", "--check", "--prune", "--root", str(root)])
+
+    assert result.exit_code == 2

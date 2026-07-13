@@ -4,6 +4,7 @@ import pytest
 
 from platformctl.schema import ServiceManifest
 from platformctl.validators import (
+    validate_directory_name,
     validate_image_tag,
     validate_manifest,
     validate_owner_exists,
@@ -90,11 +91,29 @@ def test_runbook_missing_rejected(tmp_path: Path) -> None:
     assert errors
 
 
+# Rule 14: directory name must match manifest.name
+
+
+def test_directory_name_matching_manifest_name_passes() -> None:
+    manifest_path = Path("services/checkout-api/service.yaml")
+    assert validate_directory_name(manifest(), manifest_path) == []
+
+
+def test_directory_name_diverging_from_manifest_name_rejected() -> None:
+    manifest_path = Path("services/billing-worker/service.yaml")
+    errors = validate_directory_name(manifest(), manifest_path)
+    assert errors
+    assert "billing-worker" in errors[0]
+    assert "checkout-api" in errors[0]
+
+
 # validate_manifest integration
 
 
 def test_validate_manifest_passes_for_valid_service(tmp_path: Path) -> None:
-    service_path = tmp_path / "service.yaml"
+    service_dir = tmp_path / "services" / "checkout-api"
+    service_dir.mkdir(parents=True)
+    service_path = service_dir / "service.yaml"
     import yaml
 
     service_path.write_text(yaml.safe_dump(valid_manifest()))
@@ -118,6 +137,23 @@ def test_validate_manifest_rejects_name_that_violates_rfc1123_pattern(tmp_path: 
     parsed, errors = validate_manifest(service_path, TEAMS, tmp_path)
     assert parsed is None
     assert any("name" in e for e in errors)
+
+
+def test_validate_manifest_rejects_directory_name_mismatch(tmp_path: Path) -> None:
+    import yaml
+
+    data = valid_manifest()  # name: checkout-api
+    service_dir = tmp_path / "services" / "billing-worker"
+    service_dir.mkdir(parents=True)
+    service_path = service_dir / "service.yaml"
+    service_path.write_text(yaml.safe_dump(data))
+    runbook = tmp_path / "docs" / "runbooks" / "checkout-api.md"
+    runbook.parent.mkdir(parents=True)
+    runbook.write_text("# runbook\n")
+
+    parsed, errors = validate_manifest(service_path, TEAMS, tmp_path)
+    assert parsed is not None
+    assert any("billing-worker" in e and "checkout-api" in e for e in errors)
 
 
 def test_validate_manifest_reports_multiple_failures(tmp_path: Path) -> None:

@@ -73,6 +73,26 @@ def test_validate_rejects_name_that_violates_rfc1123_pattern(tmp_path: Path) -> 
     assert "name" in result.output.lower()
 
 
+def test_validate_fails_when_directory_name_diverges_from_manifest_name(tmp_path: Path) -> None:
+    manifest = valid_manifest()  # name: checkout-api
+    (tmp_path / "platform").mkdir()
+    (tmp_path / "platform" / "teams.yaml").write_text(TEAMS_YAML)
+
+    service_dir = tmp_path / "services" / "billing-worker"
+    service_dir.mkdir(parents=True)
+    (service_dir / "service.yaml").write_text(yaml.safe_dump(manifest))
+
+    runbook_path = tmp_path / manifest["operations"]["runbook"]
+    runbook_path.parent.mkdir(parents=True, exist_ok=True)
+    runbook_path.write_text("# runbook\n")
+
+    result = runner.invoke(app, ["validate", "billing-worker", "--root", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "FAIL billing-worker" in result.output
+    assert "checkout-api" in result.output
+
+
 def test_validate_all_services_reports_each(tmp_path: Path) -> None:
     root = _make_repo(tmp_path, valid_manifest())
 

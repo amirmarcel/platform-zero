@@ -406,3 +406,49 @@ def check_drift(root: Path, artifacts: dict[str, bytes]) -> list[str]:
         elif full_path.read_bytes() != content:
             drifted.append(f"{rel_path}: out of date")
     return drifted
+
+
+# Directories and extensions searched for orphaned derived artifacts —
+# mirrors artifact_paths()'s four kinds, minus the service name component.
+_DERIVED_ARTIFACT_DIRS = [
+    ("helm/service/values", ".yaml"),
+    ("argocd/apps", ".yaml"),
+    ("observability/rules", ".yaml"),
+    ("observability/dashboards", ".json"),
+]
+
+# The observability Application (OBSERVABILITY_APP_PATH) lives alongside
+# service-derived ArgoCD Applications but is platform-owned, not derived
+# from any services/<name>/service.yaml — it must never be flagged or
+# pruned as orphaned.
+_OBSERVABILITY_APP_STEM = Path(OBSERVABILITY_APP_PATH).stem
+
+
+def find_orphaned_artifacts(root: Path, service_names: set[str]) -> list[str]:
+    """Derived artifacts on disk with no corresponding services/<name>/
+    service.yaml. If a service is deleted, its rendered Helm values, ArgoCD
+    Application, Prometheus rules, and Grafana dashboard would otherwise
+    survive undetected by check_drift, which only ever looks at artifacts
+    for services that still exist.
+    """
+    orphaned = []
+    for rel_dir, suffix in _DERIVED_ARTIFACT_DIRS:
+        directory = root / rel_dir
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob(f"*{suffix}")):
+            if rel_dir == "argocd/apps" and path.stem == _OBSERVABILITY_APP_STEM:
+                continue
+            if path.stem not in service_names:
+                orphaned.append(str((Path(rel_dir) / path.name).as_posix()))
+    return orphaned
+
+
+def prune_orphaned_artifacts(root: Path, service_names: set[str]) -> list[str]:
+    """Delete every artifact find_orphaned_artifacts() finds. Returns the
+    relative paths removed.
+    """
+    orphaned = find_orphaned_artifacts(root, service_names)
+    for rel_path in orphaned:
+        (root / rel_path).unlink()
+    return orphaned
