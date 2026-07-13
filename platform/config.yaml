@@ -1,0 +1,2 @@
+argocd:
+  repo_url: https://github.com/example/platform-zero.git

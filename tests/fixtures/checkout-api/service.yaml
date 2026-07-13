@@ -1,0 +1,23 @@
+apiVersion: platform/v1
+name: checkout-api
+owner: payments-team
+tier: 1
+image:
+  repository: ghcr.io/example/checkout-api
+  tag: v1.4.2
+runtime:
+  port: 8080
+  replicas: 3
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  probes:
+    readiness: /healthz/ready
+    liveness: /healthz/live
+slo:
+  availability: 99.9
+  latency_p99_ms: 300
+  window: 30d
+operations:
+  runbook: docs/runbooks/checkout-api.md
+  rollback: gitops-revert

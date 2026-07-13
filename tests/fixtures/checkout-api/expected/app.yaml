@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  labels:
+    platform.io/owner: payments-team
+    platform.io/tier: '1'
+  name: checkout-api
+  namespace: argocd
+spec:
+  destination:
+    namespace: checkout-api
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    helm:
+      valueFiles:
+      - values/checkout-api.yaml
+    path: helm/service
+    repoURL: https://github.com/example/platform-zero.git
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -12,6 +12,5 @@ def test_help_runs_and_lists_subcommands() -> None:
         assert subcommand in result.output
 
 
-def test_render_and_status_are_still_stubs() -> None:
-    assert runner.invoke(app, ["render"]).exit_code == 3
+def test_status_is_still_a_stub() -> None:
     assert runner.invoke(app, ["status"]).exit_code == 3

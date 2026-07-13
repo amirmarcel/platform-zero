@@ -1,0 +1,53 @@
+groups:
+- name: checkout-api.rules
+  rules:
+  - expr: sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[5m])) / sum(rate(http_requests_total{job="checkout-api"}[5m]))
+    record: checkout-api:sli_error_ratio:rate5m
+  - expr: sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[30m])) / sum(rate(http_requests_total{job="checkout-api"}[30m]))
+    record: checkout-api:sli_error_ratio:rate30m
+  - expr: sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[1h])) / sum(rate(http_requests_total{job="checkout-api"}[1h]))
+    record: checkout-api:sli_error_ratio:rate1h
+  - expr: sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[6h])) / sum(rate(http_requests_total{job="checkout-api"}[6h]))
+    record: checkout-api:sli_error_ratio:rate6h
+  - expr: sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[30d])) / sum(rate(http_requests_total{job="checkout-api"}[30d]))
+    record: checkout-api:sli_error_ratio:rate30d
+  - expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job="checkout-api"}[5m]))
+      by (le))
+    record: checkout-api:sli_latency_p99:seconds
+  - alert: checkout-apiErrorBudgetBurnFast
+    annotations:
+      owner: payments-team
+      runbook_url: docs/runbooks/checkout-api.md
+      summary: checkout-api is burning its 30d error budget fast (availability SLO
+        99.9%)
+    expr: checkout-api:sli_error_ratio:rate5m > (14.4 * 0.001) and checkout-api:sli_error_ratio:rate1h
+      > (14.4 * 0.001)
+    for: 2m
+    labels:
+      owner: payments-team
+      severity: page
+      tier: '1'
+  - alert: checkout-apiErrorBudgetBurnSlow
+    annotations:
+      owner: payments-team
+      runbook_url: docs/runbooks/checkout-api.md
+      summary: checkout-api is burning its 30d error budget slowly (availability SLO
+        99.9%)
+    expr: checkout-api:sli_error_ratio:rate30m > (6.0 * 0.001) and checkout-api:sli_error_ratio:rate6h
+      > (6.0 * 0.001)
+    for: 15m
+    labels:
+      owner: payments-team
+      severity: ticket
+      tier: '1'
+  - alert: checkout-apiLatencyP99High
+    annotations:
+      owner: payments-team
+      runbook_url: docs/runbooks/checkout-api.md
+      summary: checkout-api p99 latency exceeds its SLO threshold of 300ms
+    expr: checkout-api:sli_latency_p99:seconds > 0.3
+    for: 5m
+    labels:
+      owner: payments-team
+      severity: page
+      tier: '1'

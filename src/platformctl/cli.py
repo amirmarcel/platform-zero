@@ -4,6 +4,8 @@ from typing import Optional
 import typer
 import yaml
 
+from platformctl.config import get_argocd_repo_url, load_config
+from platformctl.render import check_drift, render_artifacts, write_artifacts
 from platformctl.teams import load_teams
 from platformctl.validators import validate_manifest
 
@@ -48,6 +50,28 @@ def _load_teams_or_exit(teams_path: Path) -> set[str]:
     except FileNotFoundError:
         typer.echo(f"error: {teams_path} not found", err=True)
         raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+
+
+def _load_config_or_exit(config_path: Path) -> dict:
+    try:
+        return load_config(config_path)
+    except FileNotFoundError:
+        typer.echo(f"error: {config_path} not found", err=True)
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+
+
+def _resolve_service_targets(name: Optional[str], services_dir: Path) -> list[Path]:
+    if name is not None:
+        target = services_dir / name
+        if not (target / "service.yaml").is_file():
+            typer.echo(f"error: {target / 'service.yaml'} not found", err=True)
+            raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+        return [target]
+
+    if not services_dir.is_dir():
+        typer.echo(f"error: {services_dir} not found", err=True)
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+    return sorted(p for p in services_dir.iterdir() if p.is_dir() and (p / "service.yaml").is_file())
 
 
 @app.command()
@@ -128,19 +152,7 @@ def validate(
     """Validate service.yaml against the schema and contract rules."""
     teams = _load_teams_or_exit(root / "platform" / "teams.yaml")
     services_dir = root / "services"
-
-    if name is not None:
-        targets = [services_dir / name]
-        if not (targets[0] / "service.yaml").is_file():
-            typer.echo(f"error: {targets[0] / 'service.yaml'} not found", err=True)
-            raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
-    else:
-        if not services_dir.is_dir():
-            typer.echo(f"error: {services_dir} not found", err=True)
-            raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
-        targets = sorted(
-            p for p in services_dir.iterdir() if p.is_dir() and (p / "service.yaml").is_file()
-        )
+    targets = _resolve_service_targets(name, services_dir)
 
     if not targets:
         typer.echo("no services found")
@@ -165,10 +177,52 @@ def render(
     name: Optional[str] = typer.Argument(
         None, help="Name of the service to render. Renders all services if omitted."
     ),
+    root: Path = typer.Option(Path("."), "--root", help="Repository root."),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Render to memory and fail if the on-disk artifacts differ, without writing (drift check).",
+    ),
 ) -> None:
     """Generate Helm values, ArgoCD Application, Prometheus rules, and Grafana dashboard."""
-    typer.echo("render: not implemented")
-    raise typer.Exit(code=NOT_IMPLEMENTED_EXIT_CODE)
+    teams = _load_teams_or_exit(root / "platform" / "teams.yaml")
+    config = _load_config_or_exit(root / "platform" / "config.yaml")
+    repo_url = get_argocd_repo_url(config)
+    services_dir = root / "services"
+    targets = _resolve_service_targets(name, services_dir)
+
+    if not targets:
+        typer.echo("no services found")
+        raise typer.Exit(code=0)
+
+    any_invalid = False
+    any_drift = False
+    for target in targets:
+        manifest, errors = validate_manifest(target / "service.yaml", teams, root)
+        if manifest is None or errors:
+            any_invalid = True
+            typer.echo(f"INVALID {target.name}")
+            for error in errors:
+                typer.echo(f"  - {error}")
+            continue
+
+        artifacts = render_artifacts(manifest, repo_url)
+        if check:
+            drifted = check_drift(root, artifacts)
+            if drifted:
+                any_drift = True
+                typer.echo(f"DRIFT {target.name}")
+                for d in drifted:
+                    typer.echo(f"  - {d}")
+            else:
+                typer.echo(f"OK {target.name}")
+        else:
+            write_artifacts(root, artifacts)
+            typer.echo(f"rendered {target.name}")
+
+    if any_invalid or (check and any_drift):
+        raise typer.Exit(code=VALIDATION_FAILURE_EXIT_CODE)
+    raise typer.Exit(code=0)
 
 
 @app.command()

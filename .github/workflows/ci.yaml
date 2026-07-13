@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install platformctl
+        run: pip install -e ".[dev]"
+
+      - name: Validate service manifests
+        run: platformctl validate
+
+      - name: Check for drift in derived artifacts
+        run: platformctl render --check
+
+      - name: Run tests
+        run: pytest -q

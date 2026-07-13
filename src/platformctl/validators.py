@@ -26,6 +26,7 @@ from pathlib import Path
 from pydantic import ValidationError
 import yaml
 
+from platformctl.quantities import parse_cpu, parse_memory
 from platformctl.schema import ServiceManifest
 
 _IMMUTABLE_TAG_RE = re.compile(
@@ -33,31 +34,6 @@ _IMMUTABLE_TAG_RE = re.compile(
     r"|^[0-9a-f]{40}$"  # full git sha
     r"|^sha256:[0-9a-f]{64}$"  # image digest
 )
-
-_MEMORY_UNITS = {
-    "Ki": 1024,
-    "Mi": 1024**2,
-    "Gi": 1024**3,
-    "Ti": 1024**4,
-    "K": 1000,
-    "M": 1000**2,
-    "G": 1000**3,
-}
-
-
-def _parse_cpu(quantity: str) -> float:
-    quantity = quantity.strip()
-    if quantity.endswith("m"):
-        return float(quantity[:-1]) / 1000
-    return float(quantity)
-
-
-def _parse_memory(quantity: str) -> float:
-    quantity = quantity.strip()
-    for suffix in sorted(_MEMORY_UNITS, key=len, reverse=True):
-        if quantity.endswith(suffix):
-            return float(quantity[: -len(suffix)]) * _MEMORY_UNITS[suffix]
-    return float(quantity)
 
 
 def validate_image_tag(manifest: ServiceManifest) -> list[str]:
@@ -80,7 +56,7 @@ def validate_resource_limits(manifest: ServiceManifest) -> list[str]:
     limits = manifest.runtime.resources.limits
 
     try:
-        if _parse_cpu(limits.cpu) < _parse_cpu(requests.cpu):
+        if parse_cpu(limits.cpu) < parse_cpu(requests.cpu):
             errors.append(
                 f"runtime.resources.limits.cpu ({limits.cpu}) is less than "
                 f"requests.cpu ({requests.cpu})"
@@ -92,7 +68,7 @@ def validate_resource_limits(manifest: ServiceManifest) -> list[str]:
         )
 
     try:
-        if _parse_memory(limits.memory) < _parse_memory(requests.memory):
+        if parse_memory(limits.memory) < parse_memory(requests.memory):
             errors.append(
                 f"runtime.resources.limits.memory ({limits.memory}) is less than "
                 f"requests.memory ({requests.memory})"
