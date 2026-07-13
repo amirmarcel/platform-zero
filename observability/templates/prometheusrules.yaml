@@ -1,1 +1,14 @@
-
+{{- range $path, $bytes := .Files.Glob "rules/*.yaml" }}
+{{- $name := trimSuffix ".yaml" (base $path) }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    release: {{ $.Values.prometheusRelease }}
+    platform.io/service: {{ $name }}
+spec:
+{{ $.Files.Get $path | indent 2 }}
+{{- end }}
