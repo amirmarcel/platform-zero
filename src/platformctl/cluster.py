@@ -12,6 +12,16 @@ class KubectlError(RuntimeError):
     """kubectl was unavailable, failed, or returned unparsable output."""
 
 
+class KubectlNotFoundError(KubectlError):
+    """kubectl reported NotFound for the requested resource — the resource
+    simply doesn't exist yet (e.g. an Application before ArgoCD's first
+    sync), not a cluster/auth/network failure. A subclass of KubectlError so
+    callers that don't care about the distinction can still catch it with a
+    plain `except KubectlError`; callers that do care (status.py) catch this
+    first.
+    """
+
+
 def kubectl_get_json(args: list[str]) -> dict:
     """Run `kubectl <args>` and parse its stdout as JSON.
 
@@ -32,6 +42,14 @@ def kubectl_get_json(args: list[str]) -> dict:
         raise KubectlError(f"kubectl {' '.join(args)} timed out") from exc
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.strip() if exc.stderr else f"exit code {exc.returncode}"
+        # kubectl's own error format for a missing resource is always
+        # "Error from server (NotFound): <kind> \"<name>\" not found" —
+        # distinct from auth/network/timeout failures, which don't carry
+        # "(NotFound)". Kept a text match rather than parsing `-o json`
+        # error output because kubectl doesn't emit that here; it's a plain
+        # stderr string regardless of the `-o json` requested for stdout.
+        if exc.stderr and "(NotFound)" in exc.stderr:
+            raise KubectlNotFoundError(f"kubectl {' '.join(args)} failed: {detail}") from exc
         raise KubectlError(f"kubectl {' '.join(args)} failed: {detail}") from exc
 
     try:

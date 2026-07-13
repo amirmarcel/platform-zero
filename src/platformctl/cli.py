@@ -345,6 +345,10 @@ def status(
             typer.echo(f"error: {manifest.name}: {exc}", err=True)
             raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
 
+        if not svc_status.deployed:
+            typer.echo(f"{manifest.name}: not deployed (no ArgoCD Application)")
+            continue
+
         if not svc_status.healthy:
             any_unhealthy = True
 

@@ -1,5 +1,10 @@
+from unittest.mock import patch
+
+import pytest
+
+from platformctl.cluster import KubectlError, KubectlNotFoundError
 from platformctl.schema import ServiceManifest
-from platformctl.status import ServiceStatus, evaluate_status
+from platformctl.status import ServiceStatus, evaluate_status, get_service_status
 
 from conftest import valid_manifest
 
@@ -106,3 +111,33 @@ def test_service_status_healthy_property_requires_all_three_conditions() -> None
     assert not ServiceStatus("svc", "OutOfSync", "Healthy", "v1", []).healthy
     assert not ServiceStatus("svc", "Synced", "Progressing", "v1", []).healthy
     assert not ServiceStatus("svc", "Synced", "Healthy", "v1", ["SomeAlert"]).healthy
+
+
+def test_service_status_not_deployed_is_never_healthy_even_with_matching_strings() -> None:
+    # deployed=False must win even if sync/health happen to read "Synced"/"Healthy".
+    assert not ServiceStatus("svc", "Synced", "Healthy", "v1", [], deployed=False).healthy
+
+
+# get_service_status: rendered-but-not-yet-deployed is normal, not an error;
+# a genuine kubectl failure still is.
+
+
+def test_get_service_status_reports_not_deployed_when_application_missing() -> None:
+    with patch(
+        "platformctl.status.fetch_application",
+        side_effect=KubectlNotFoundError('applications.argoproj.io "checkout-api" not found'),
+    ):
+        result = get_service_status(manifest(), alerts=[])
+
+    assert result.deployed is False
+    assert not result.healthy
+    assert result.sync_status == "NotDeployed"
+    assert result.health_status == "NotDeployed"
+    assert result.image_tag == "unknown"
+    assert result.firing_alerts == []
+
+
+def test_get_service_status_reraises_genuine_kubectl_failures() -> None:
+    with patch("platformctl.status.fetch_application", side_effect=KubectlError("kubectl not found on PATH")):
+        with pytest.raises(KubectlError):
+            get_service_status(manifest(), alerts=[])

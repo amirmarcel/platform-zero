@@ -10,7 +10,7 @@ cluster required.
 
 from dataclasses import dataclass, field
 
-from platformctl.cluster import kubectl_get_json
+from platformctl.cluster import KubectlNotFoundError, kubectl_get_json
 from platformctl.render import _alert_name
 from platformctl.schema import ServiceManifest
 
@@ -27,6 +27,10 @@ PROMETHEUS_PORT = 9090
 HEALTHY_STATUS = "Healthy"
 SYNCED_STATUS = "Synced"
 
+# Reported when the ArgoCD Application doesn't exist yet — the normal state
+# between `platformctl render` and the first merge to main, not a failure.
+NOT_DEPLOYED_STATUS = "NotDeployed"
+
 
 @dataclass
 class ServiceStatus:
@@ -35,11 +39,13 @@ class ServiceStatus:
     health_status: str
     image_tag: str
     firing_alerts: list[str] = field(default_factory=list)
+    deployed: bool = True
 
     @property
     def healthy(self) -> bool:
         return (
-            self.sync_status == SYNCED_STATUS
+            self.deployed
+            and self.sync_status == SYNCED_STATUS
             and self.health_status == HEALTHY_STATUS
             and not self.firing_alerts
         )
@@ -104,8 +110,21 @@ def get_service_status(manifest: ServiceManifest, alerts: list[dict]) -> Service
     """Fetch this service's Application from the cluster and evaluate its
     status against the already-fetched alert list.
 
-    Raises KubectlError if the cluster can't be reached or the Application
-    doesn't exist yet (e.g. before the first ArgoCD sync).
+    Rendered-but-not-yet-deployed is a normal state — exactly where a
+    developer sits between `render` and the first merge to main — so a
+    missing Application is not an error here: it comes back as a
+    ServiceStatus with deployed=False. Raises KubectlError for a genuine
+    cluster failure (no kubectl on PATH, an auth error, a timeout, ...).
     """
-    application = fetch_application(manifest.name)
+    try:
+        application = fetch_application(manifest.name)
+    except KubectlNotFoundError:
+        return ServiceStatus(
+            name=manifest.name,
+            sync_status=NOT_DEPLOYED_STATUS,
+            health_status=NOT_DEPLOYED_STATUS,
+            image_tag="unknown",
+            firing_alerts=[],
+            deployed=False,
+        )
     return evaluate_status(manifest, application, alerts)
