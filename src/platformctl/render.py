@@ -41,6 +41,24 @@ def _window_suffix(window: str) -> str:
     return re.sub(r"[^0-9A-Za-z]", "_", window)
 
 
+def _metric_name(name: str) -> str:
+    """Sanitize a service name into a valid Prometheus metric-name component —
+    used for recording-rule names and every reference to one inside an expr.
+    Metric names must match [a-zA-Z_:][a-zA-Z0-9_:]*, so hyphens (legal in a
+    service name) are illegal here. Never use this for a label value or
+    selector (job=, container=, ...) — those keep the raw service name.
+    """
+    return re.sub(r"[^a-zA-Z0-9_:]", "_", name)
+
+
+def _alert_name(name: str) -> str:
+    """CamelCase a service name into a valid alert-name identifier, e.g.
+    demo-api -> DemoApi. Prometheus alert names must be valid identifiers;
+    prefixing the raw hyphenated name (demo-apiErrorBudgetBurnFast) is not.
+    """
+    return "".join(part.capitalize() for part in re.split(r"[^a-zA-Z0-9]+", name) if part)
+
+
 def render_helm_values(manifest: ServiceManifest) -> dict:
     return {
         "name": manifest.name,
@@ -167,10 +185,16 @@ def _error_budget(manifest: ServiceManifest) -> float:
 
 def render_prometheus_rules(manifest: ServiceManifest) -> dict:
     name = manifest.name
+    # Label values and selectors keep the raw name; recording-rule names and
+    # alert names must be valid Prometheus identifiers, so they use the
+    # sanitized forms.
+    metric = _metric_name(name)
+    alert_prefix = _alert_name(name)
+
     job_selector = f'job="{name}"'
     error_budget = _error_budget(manifest)
     window = manifest.slo.window
-    window_record = f"{name}:sli_error_ratio:rate{_window_suffix(window)}"
+    window_record = f"{metric}:sli_error_ratio:rate{_window_suffix(window)}"
     latency_threshold_seconds = manifest.slo.latency_p99_ms / 1000
 
     def error_ratio_expr(window_arg: str) -> str:
@@ -180,15 +204,15 @@ def render_prometheus_rules(manifest: ServiceManifest) -> dict:
         )
 
     recording_rules = [
-        {"record": f"{name}:sli_error_ratio:rate5m", "expr": error_ratio_expr("5m")},
-        {"record": f"{name}:sli_error_ratio:rate30m", "expr": error_ratio_expr("30m")},
-        {"record": f"{name}:sli_error_ratio:rate1h", "expr": error_ratio_expr("1h")},
-        {"record": f"{name}:sli_error_ratio:rate6h", "expr": error_ratio_expr("6h")},
+        {"record": f"{metric}:sli_error_ratio:rate5m", "expr": error_ratio_expr("5m")},
+        {"record": f"{metric}:sli_error_ratio:rate30m", "expr": error_ratio_expr("30m")},
+        {"record": f"{metric}:sli_error_ratio:rate1h", "expr": error_ratio_expr("1h")},
+        {"record": f"{metric}:sli_error_ratio:rate6h", "expr": error_ratio_expr("6h")},
         # Error ratio over the full SLO window — used to compute budget remaining,
         # as opposed to the short windows above which are burn-rate inputs.
         {"record": window_record, "expr": error_ratio_expr(window)},
         {
-            "record": f"{name}:sli_latency_p99:seconds",
+            "record": f"{metric}:sli_latency_p99:seconds",
             "expr": (
                 "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket"
                 f"{{{job_selector}}}[5m])) by (le))"
@@ -204,10 +228,10 @@ def render_prometheus_rules(manifest: ServiceManifest) -> dict:
 
     alert_rules = [
         {
-            "alert": f"{name}ErrorBudgetBurnFast",
+            "alert": f"{alert_prefix}ErrorBudgetBurnFast",
             "expr": (
-                f"{name}:sli_error_ratio:rate5m > ({BURN_RATE_FAST} * {error_budget}) "
-                f"and {name}:sli_error_ratio:rate1h > ({BURN_RATE_FAST} * {error_budget})"
+                f"{metric}:sli_error_ratio:rate5m > ({BURN_RATE_FAST} * {error_budget}) "
+                f"and {metric}:sli_error_ratio:rate1h > ({BURN_RATE_FAST} * {error_budget})"
             ),
             "for": "2m",
             "labels": {**common_labels, "severity": "page"},
@@ -220,10 +244,10 @@ def render_prometheus_rules(manifest: ServiceManifest) -> dict:
             },
         },
         {
-            "alert": f"{name}ErrorBudgetBurnSlow",
+            "alert": f"{alert_prefix}ErrorBudgetBurnSlow",
             "expr": (
-                f"{name}:sli_error_ratio:rate30m > ({BURN_RATE_SLOW} * {error_budget}) "
-                f"and {name}:sli_error_ratio:rate6h > ({BURN_RATE_SLOW} * {error_budget})"
+                f"{metric}:sli_error_ratio:rate30m > ({BURN_RATE_SLOW} * {error_budget}) "
+                f"and {metric}:sli_error_ratio:rate6h > ({BURN_RATE_SLOW} * {error_budget})"
             ),
             "for": "15m",
             "labels": {**common_labels, "severity": "ticket"},
@@ -236,8 +260,8 @@ def render_prometheus_rules(manifest: ServiceManifest) -> dict:
             },
         },
         {
-            "alert": f"{name}LatencyP99High",
-            "expr": f"{name}:sli_latency_p99:seconds > {latency_threshold_seconds}",
+            "alert": f"{alert_prefix}LatencyP99High",
+            "expr": f"{metric}:sli_latency_p99:seconds > {latency_threshold_seconds}",
             "for": "5m",
             "labels": {**common_labels, "severity": "page"},
             "annotations": {
@@ -262,10 +286,11 @@ def render_prometheus_rules(manifest: ServiceManifest) -> dict:
 
 def render_grafana_dashboard(manifest: ServiceManifest) -> dict:
     name = manifest.name
+    metric = _metric_name(name)
     cadvisor_selector = f'container="{name}",namespace="{name}"'
     cpu_limit_cores = parse_cpu(manifest.runtime.resources.limits.cpu)
     memory_limit_bytes = parse_memory(manifest.runtime.resources.limits.memory)
-    window_record = f"{name}:sli_error_ratio:rate{_window_suffix(manifest.slo.window)}"
+    window_record = f"{metric}:sli_error_ratio:rate{_window_suffix(manifest.slo.window)}"
     error_budget = _error_budget(manifest)
 
     panels = [
@@ -276,7 +301,7 @@ def render_grafana_dashboard(manifest: ServiceManifest) -> dict:
             "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
             "fieldConfig": {"defaults": {"unit": "s"}},
             "targets": [
-                {"expr": f"{name}:sli_latency_p99:seconds", "legendFormat": "p99"}
+                {"expr": f"{metric}:sli_latency_p99:seconds", "legendFormat": "p99"}
             ],
         },
         {
@@ -286,7 +311,7 @@ def render_grafana_dashboard(manifest: ServiceManifest) -> dict:
             "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
             "fieldConfig": {"defaults": {"unit": "percentunit"}},
             "targets": [
-                {"expr": f"{name}:sli_error_ratio:rate5m", "legendFormat": "5m error ratio"}
+                {"expr": f"{metric}:sli_error_ratio:rate5m", "legendFormat": "5m error ratio"}
             ],
         },
         {
