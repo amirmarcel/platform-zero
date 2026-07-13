@@ -5,9 +5,11 @@ from typing import Optional
 import typer
 import yaml
 
+from platformctl.cluster import KubectlError
 from platformctl.config import get_argocd_repo_url, load_config
 from platformctl.render import check_drift, render_artifacts, render_observability_artifact, write_artifacts
 from platformctl.schema import NAME_MAX_LENGTH, NAME_PATTERN
+from platformctl.status import fetch_active_alerts, get_service_status
 from platformctl.teams import InvalidTeamNameError, load_teams
 from platformctl.validators import validate_manifest
 
@@ -19,7 +21,6 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-NOT_IMPLEMENTED_EXIT_CODE = 3
 USAGE_ERROR_EXIT_CODE = 2
 VALIDATION_FAILURE_EXIT_CODE = 1
 
@@ -262,10 +263,54 @@ def status(
     name: Optional[str] = typer.Argument(
         None, help="Name of the service to check. Checks all services if omitted."
     ),
+    root: Path = typer.Option(Path("."), "--root", help="Repository root."),
 ) -> None:
-    """Show deployment and drift status for a service."""
-    typer.echo("status: not implemented")
-    raise typer.Exit(code=NOT_IMPLEMENTED_EXIT_CODE)
+    """Show ArgoCD sync/health, the deployed image tag, and firing alerts."""
+    teams = _load_teams_or_exit(root / "platform" / "teams.yaml")
+    services_dir = root / "services"
+    targets = _resolve_service_targets(name, services_dir)
+
+    if not targets:
+        typer.echo("no services found")
+        raise typer.Exit(code=0)
+
+    manifests = []
+    for target in targets:
+        manifest, errors = validate_manifest(target / "service.yaml", teams, root)
+        if manifest is None or errors:
+            typer.echo(
+                f"error: {target.name}/service.yaml is invalid; run `platformctl validate` first",
+                err=True,
+            )
+            raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+        manifests.append(manifest)
+
+    try:
+        alerts = fetch_active_alerts()
+    except KubectlError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+
+    any_unhealthy = False
+    for manifest in manifests:
+        try:
+            svc_status = get_service_status(manifest, alerts)
+        except KubectlError as exc:
+            typer.echo(f"error: {manifest.name}: {exc}", err=True)
+            raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+
+        if not svc_status.healthy:
+            any_unhealthy = True
+
+        alerts_field = ", ".join(svc_status.firing_alerts) if svc_status.firing_alerts else "none"
+        label = "OK" if svc_status.healthy else "DEGRADED"
+        typer.echo(
+            f"{label} {manifest.name}: sync={svc_status.sync_status} "
+            f"health={svc_status.health_status} image={svc_status.image_tag} "
+            f"alerts={alerts_field}"
+        )
+
+    raise typer.Exit(code=VALIDATION_FAILURE_EXIT_CODE if any_unhealthy else 0)
 
 
 if __name__ == "__main__":
