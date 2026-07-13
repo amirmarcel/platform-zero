@@ -11,8 +11,7 @@ cluster-up:
 	kind create cluster --name $(CLUSTER_NAME) --config $(KIND_CONFIG)
 	kubectl apply -f $(INGRESS_NGINX_MANIFEST)
 	kubectl wait --namespace ingress-nginx \
-		--for=condition=ready pod \
-		--selector=app.kubernetes.io/component=controller \
+		--for=condition=Available deployment/ingress-nginx-controller \
 		--timeout=180s
 
 ## platform-install: install ArgoCD and kube-prometheus-stack via Helm.

@@ -104,6 +104,12 @@ and state `UP`. If it's missing, the `ServiceMonitor`
 its `release` label matches the Helm release name used in step 3
 (`kube-prometheus-stack` by default).
 
+Four control-plane targets (`kube-controller-manager`, `kube-etcd`,
+`kube-proxy`, `kube-scheduler`) will show as `down` in Prometheus. This is a
+kind artifact, not a platform problem — those components bind to localhost
+inside the control-plane container and aren't reachable from the pod network.
+They're unrelated to service SLOs.
+
 The dashboard landed as a ConfigMap the Grafana sidecar loads automatically:
 
 ```
