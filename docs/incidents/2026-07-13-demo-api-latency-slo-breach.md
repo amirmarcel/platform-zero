@@ -112,12 +112,12 @@ is 12:04:25 (2026-07-13T16:04:25Z). `platformctl status` reported `DEGRADED`
 (naming the alert) 18 seconds earlier, at 12:04:07 — one polling interval
 ahead of the confirmed transition, consistent with normal polling cadence.
 
-That 18-second gap is a real point in favor of the CLI, not noise: a
-responder relying on `platformctl status` would have known about the
-degradation roughly 90 seconds before it was possible to see the same thing
-by manually refreshing the Prometheus UI, which is when it was actually
-first noticed in this incident (~12:06 — see Timeline). A one-command,
-scriptable check beat manual dashboard-watching to the same information.
+I did not notice the degradation myself until I refreshed the Prometheus UI at ~12:06, 
+roughly 90 seconds after platformctl status had already reported it. 
+The 18-second figure is the meaningful one (the CLI's polling cadence against the alert's 
+actual transition); the 90 seconds is a measure of my browser habits, not of the tooling. 
+The point stands either way: a scriptable one-command check surfaced the degradation 
+without anyone needing to be watching a dashboard.
 
 What did not catch it:
 
@@ -139,6 +139,14 @@ to evaluate. Real traffic only resumed at 11:59 (+8m); the alert fired 5
 minutes after that (12:04:25), consistent with the alert's own `for: 5m`
 clause and no more — see the Timeline confound note for why the recording
 rule's `[5m]` window didn't add further delay on top of that.
+
+The error-rate and error-budget panels are empty by design. The failure was purely 
+latency: ERROR_RATE remained 0.0 throughout, so the service returned correct responses 
+and there are no 5xx to plot. The error-budget panel divides by a 30-day error-ratio 
+recording rule, and a kind cluster that has existed for a few hours has no 30 days of 
+history — the query is correct for a real deployment and cannot populate here.
+
+![demo-api dashboard during the incident](../images/incident-dashboard.png)
 
 ## What went well
 
