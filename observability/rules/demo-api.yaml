@@ -2,24 +2,24 @@ groups:
 - name: demo-api.rules
   rules:
   - expr: sum(rate(http_requests_total{job="demo-api",code=~"5.."}[5m])) / sum(rate(http_requests_total{job="demo-api"}[5m]))
-    record: demo_api:sli_error_ratio:rate5m
+    record: demo-api:sli_error_ratio:rate5m
   - expr: sum(rate(http_requests_total{job="demo-api",code=~"5.."}[30m])) / sum(rate(http_requests_total{job="demo-api"}[30m]))
-    record: demo_api:sli_error_ratio:rate30m
+    record: demo-api:sli_error_ratio:rate30m
   - expr: sum(rate(http_requests_total{job="demo-api",code=~"5.."}[1h])) / sum(rate(http_requests_total{job="demo-api"}[1h]))
-    record: demo_api:sli_error_ratio:rate1h
+    record: demo-api:sli_error_ratio:rate1h
   - expr: sum(rate(http_requests_total{job="demo-api",code=~"5.."}[6h])) / sum(rate(http_requests_total{job="demo-api"}[6h]))
-    record: demo_api:sli_error_ratio:rate6h
+    record: demo-api:sli_error_ratio:rate6h
   - expr: sum(rate(http_requests_total{job="demo-api",code=~"5.."}[30d])) / sum(rate(http_requests_total{job="demo-api"}[30d]))
-    record: demo_api:sli_error_ratio:rate30d
+    record: demo-api:sli_error_ratio:rate30d
   - expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job="demo-api"}[5m]))
       by (le))
-    record: demo_api:sli_latency_p99:seconds
+    record: demo-api:sli_latency_p99:seconds
   - alert: DemoApiErrorBudgetBurnFast
     annotations:
       owner: platform-team
       runbook_url: docs/runbooks/demo-api.md
       summary: demo-api is burning its 30d error budget fast (availability SLO 99.5%)
-    expr: demo_api:sli_error_ratio:rate5m > (14.4 * 0.005) and demo_api:sli_error_ratio:rate1h
+    expr: demo-api:sli_error_ratio:rate5m > (14.4 * 0.005) and demo-api:sli_error_ratio:rate1h
       > (14.4 * 0.005)
     for: 2m
     labels:
@@ -31,7 +31,7 @@ groups:
       owner: platform-team
       runbook_url: docs/runbooks/demo-api.md
       summary: demo-api is burning its 30d error budget slowly (availability SLO 99.5%)
-    expr: demo_api:sli_error_ratio:rate30m > (6.0 * 0.005) and demo_api:sli_error_ratio:rate6h
+    expr: demo-api:sli_error_ratio:rate30m > (6.0 * 0.005) and demo-api:sli_error_ratio:rate6h
       > (6.0 * 0.005)
     for: 15m
     labels:
@@ -43,7 +43,7 @@ groups:
       owner: platform-team
       runbook_url: docs/runbooks/demo-api.md
       summary: demo-api p99 latency exceeds its SLO threshold of 500ms
-    expr: demo_api:sli_latency_p99:seconds > 0.5
+    expr: demo-api:sli_latency_p99:seconds > 0.5
     for: 5m
     labels:
       owner: platform-team

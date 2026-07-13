@@ -188,7 +188,7 @@ def render_prometheus_rules(manifest: ServiceManifest) -> dict:
     # Label values and selectors keep the raw name; recording-rule names and
     # alert names must be valid Prometheus identifiers, so they use the
     # sanitized forms.
-    metric = _metric_name(name)
+    metric = name
     alert_prefix = _alert_name(name)
 
     job_selector = f'job="{name}"'
