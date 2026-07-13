@@ -5,7 +5,7 @@ import typer
 import yaml
 
 from platformctl.config import get_argocd_repo_url, load_config
-from platformctl.render import check_drift, render_artifacts, write_artifacts
+from platformctl.render import check_drift, render_artifacts, render_observability_artifact, write_artifacts
 from platformctl.teams import load_teams
 from platformctl.validators import validate_manifest
 
@@ -119,6 +119,7 @@ def init(
                 "readiness": "/healthz/ready",
                 "liveness": "/healthz/live",
             },
+            "env": [],
         },
         "slo": {
             "availability": defaults["availability"],
@@ -191,12 +192,28 @@ def render(
     services_dir = root / "services"
     targets = _resolve_service_targets(name, services_dir)
 
-    if not targets:
-        typer.echo("no services found")
-        raise typer.Exit(code=0)
-
     any_invalid = False
     any_drift = False
+
+    # The observability Application is platform-owned, not derived from any
+    # service manifest, so it renders even when no services exist.
+    obs = render_observability_artifact(repo_url)
+    if check:
+        drifted = check_drift(root, obs)
+        if drifted:
+            any_drift = True
+            typer.echo("DRIFT observability")
+            for d in drifted:
+                typer.echo(f"  - {d}")
+        else:
+            typer.echo("OK observability")
+    else:
+        write_artifacts(root, obs)
+        typer.echo("rendered observability")
+
+    if not targets:
+        typer.echo("no services found")
+
     for target in targets:
         manifest, errors = validate_manifest(target / "service.yaml", teams, root)
         if manifest is None or errors:

@@ -1,0 +1,29 @@
+# Without this, kube-prometheus-stack never scrapes the service: every
+# job="<name>" recording rule (observability/rules/<name>.yaml) and every
+# dashboard panel built on it would be empty, and no burn-rate alert could
+# ever fire.
+#
+# jobLabel is left unset deliberately: the Prometheus Operator's documented
+# default, when jobLabel is unset, is to use the scraped Service's
+# metadata.name as the `job` label. The Service this selects
+# (templates/service.yaml) is named {{ .Values.name }}, so job ==
+# {{ .Values.name }} — exactly the job="{{ .Values.name }}" selector the
+# rendered recording rules and alerts use. If that default ever changes,
+# add an explicit relabeling here to keep the two in sync.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.name }}
+  labels:
+    app.kubernetes.io/managed-by: platformctl
+    platform.io/owner: {{ .Values.owner }}
+    platform.io/tier: "{{ .Values.tier }}"
+    release: {{ .Values.prometheusRelease }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.name }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

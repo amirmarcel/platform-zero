@@ -41,6 +41,58 @@ def test_render_writes_all_four_artifacts(tmp_path: Path) -> None:
     assert (root / "observability" / "dashboards" / "checkout-api.json").is_file()
 
 
+def test_render_writes_observability_application(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+
+    result = runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+
+    assert result.exit_code == 0, result.output
+    obs_path = root / "argocd" / "apps" / "observability.yaml"
+    assert obs_path.is_file()
+    obs = yaml.safe_load(obs_path.read_text())
+    assert obs["spec"]["source"]["repoURL"] == "https://example.invalid/platform-zero.git"
+    assert obs["spec"]["source"]["path"] == "observability"
+
+
+def test_render_observability_is_rendered_with_zero_services(tmp_path: Path) -> None:
+    (tmp_path / "platform").mkdir()
+    (tmp_path / "platform" / "teams.yaml").write_text(TEAMS_YAML)
+    (tmp_path / "platform" / "config.yaml").write_text(CONFIG_YAML)
+    (tmp_path / "services").mkdir()
+
+    result = runner.invoke(app, ["render", "--root", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "argocd" / "apps" / "observability.yaml").is_file()
+
+
+def test_render_check_fails_when_observability_application_tampered(tmp_path: Path) -> None:
+    root = _make_repo(tmp_path, valid_manifest())
+    runner.invoke(app, ["render", "checkout-api", "--root", str(root)])
+
+    obs_path = root / "argocd" / "apps" / "observability.yaml"
+    obs = yaml.safe_load(obs_path.read_text())
+    obs["spec"]["source"]["path"] = "tampered"
+    obs_path.write_text(yaml.safe_dump(obs))
+
+    result = runner.invoke(app, ["render", "checkout-api", "--check", "--root", str(root)])
+
+    assert result.exit_code == 1
+    assert "DRIFT observability" in result.output
+
+
+def test_render_check_fails_with_zero_services_when_observability_drifted(tmp_path: Path) -> None:
+    (tmp_path / "platform").mkdir()
+    (tmp_path / "platform" / "teams.yaml").write_text(TEAMS_YAML)
+    (tmp_path / "platform" / "config.yaml").write_text(CONFIG_YAML)
+    (tmp_path / "services").mkdir()
+
+    result = runner.invoke(app, ["render", "--check", "--root", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "DRIFT observability" in result.output
+
+
 def test_render_check_passes_when_artifacts_are_up_to_date(tmp_path: Path) -> None:
     root = _make_repo(tmp_path, valid_manifest())
     runner.invoke(app, ["render", "checkout-api", "--root", str(root)])

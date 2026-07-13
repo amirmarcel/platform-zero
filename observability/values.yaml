@@ -1,0 +1,6 @@
+# Must match the namespace and Helm release name kube-prometheus-stack was
+# installed with (see `make platform-install`) — kube-prometheus-stack's
+# default ruleSelector matches PrometheusRule CRs labeled release: <release
+# name>, and its Grafana sidecar watches ConfigMaps in its own namespace.
+namespace: monitoring
+prometheusRelease: kube-prometheus-stack

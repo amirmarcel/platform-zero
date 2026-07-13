@@ -3,6 +3,12 @@
 name: ""
 owner: ""
 tier: 3
+# Cluster-wide convention, not per-service: the Helm release name
+# kube-prometheus-stack was installed with (see `make platform-install`).
+# The ServiceMonitor's `release` label must match it for
+# kube-prometheus-stack's serviceMonitorSelector to pick this up. Override
+# here (not per generated values file) if your cluster uses a different name.
+prometheusRelease: kube-prometheus-stack
 image:
   repository: ""
   tag: ""
@@ -19,3 +25,4 @@ runtime:
   probes:
     readiness: /healthz/ready
     liveness: /healthz/live
+  env: []

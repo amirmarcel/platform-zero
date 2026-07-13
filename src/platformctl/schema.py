@@ -24,6 +24,13 @@ class Probes(BaseModel):
     liveness: str = Field(min_length=1)
 
 
+class EnvVar(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    value: str
+
+
 class Runtime(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -31,6 +38,7 @@ class Runtime(BaseModel):
     replicas: int = Field(ge=1)
     resources: Resources
     probes: Probes
+    env: list[EnvVar]
 
 
 class Image(BaseModel):

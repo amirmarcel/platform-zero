@@ -2,20 +2,16 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   labels:
-    platform.io/owner: payments-team
-    platform.io/tier: '1'
-  name: checkout-api
+    platform.io/owner: platform-team
+  name: observability
   namespace: argocd
 spec:
   destination:
-    namespace: checkout-api
+    namespace: monitoring
     server: https://kubernetes.default.svc
   project: default
   source:
-    helm:
-      valueFiles:
-      - values/checkout-api.yaml
-    path: helm/service
+    path: observability
     repoURL: https://github.com/example/platform-zero.git
     targetRevision: HEAD
   syncPolicy:

@@ -67,6 +67,9 @@ def render_helm_values(manifest: ServiceManifest) -> dict:
                 "readiness": manifest.runtime.probes.readiness,
                 "liveness": manifest.runtime.probes.liveness,
             },
+            "env": [
+                {"name": e.name, "value": e.value} for e in manifest.runtime.env
+            ],
         },
     }
 
@@ -102,9 +105,60 @@ def render_argocd_application(manifest: ServiceManifest, repo_url: str) -> dict:
                     "prune": True,
                     "selfHeal": True,
                 },
+                "syncOptions": ["CreateNamespace=true"],
             },
         },
     }
+
+
+OBSERVABILITY_APP_PATH = "argocd/apps/observability.yaml"
+
+
+def render_observability_application(repo_url: str) -> dict:
+    """The ArgoCD Application for observability/ — the wrapper chart that turns
+    the rendered Prometheus rules and Grafana dashboards into a PrometheusRule
+    CR and dashboard ConfigMaps. Not tied to any one service manifest, but
+    still derived from platform/config.yaml's repo_url so it carries no
+    placeholder and is covered by the same drift check as every other
+    Application under argocd/apps/.
+    """
+    return {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "name": "observability",
+            "namespace": "argocd",
+            "labels": {
+                "platform.io/owner": "platform-team",
+            },
+        },
+        "spec": {
+            "project": "default",
+            "source": {
+                "repoURL": repo_url,
+                "targetRevision": "HEAD",
+                "path": "observability",
+            },
+            "destination": {
+                "server": "https://kubernetes.default.svc",
+                "namespace": "monitoring",
+            },
+            "syncPolicy": {
+                "automated": {
+                    "prune": True,
+                    "selfHeal": True,
+                },
+                "syncOptions": ["CreateNamespace=true"],
+            },
+        },
+    }
+
+
+def render_observability_artifact(repo_url: str) -> dict[str, bytes]:
+    """Pure: no I/O. Companion to render_artifacts for the one Application
+    that isn't derived from a service manifest.
+    """
+    return {OBSERVABILITY_APP_PATH: _to_yaml_bytes(render_observability_application(repo_url))}
 
 
 def _error_budget(manifest: ServiceManifest) -> float:

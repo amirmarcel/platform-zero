@@ -1,15 +1,19 @@
 image:
-  repository: ghcr.io/example/checkout-api
-  tag: v1.4.2
-name: checkout-api
-owner: payments-team
+  repository: ghcr.io/amirmarcel/demo-api
+  tag: v0.1.0
+name: demo-api
+owner: platform-team
 runtime:
-  env: []
+  env:
+  - name: LATENCY_MS
+    value: '0'
+  - name: ERROR_RATE
+    value: '0.0'
   port: 8080
   probes:
     liveness: /healthz/live
     readiness: /healthz/ready
-  replicas: 3
+  replicas: 2
   resources:
     limits:
       cpu: 500m
@@ -17,4 +21,4 @@ runtime:
     requests:
       cpu: 100m
       memory: 128Mi
-tier: 1
+tier: 2

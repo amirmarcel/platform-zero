@@ -1,0 +1,117 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "demo-api:sli_latency_p99:seconds",
+          "legendFormat": "p99"
+        }
+      ],
+      "title": "Latency (p99)",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "demo-api:sli_error_ratio:rate5m",
+          "legendFormat": "5m error ratio"
+        }
+      ],
+      "title": "Error rate",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container=\"demo-api\",namespace=\"demo-api\"}[5m])) / 0.5",
+          "legendFormat": "cpu saturation"
+        },
+        {
+          "expr": "sum(container_memory_working_set_bytes{container=\"demo-api\",namespace=\"demo-api\"}) / 536870912.0",
+          "legendFormat": "memory saturation"
+        }
+      ],
+      "title": "Saturation (cpu / memory vs limits)",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "1 - (demo-api:sli_error_ratio:rate30d / 0.005)",
+          "legendFormat": "budget remaining"
+        }
+      ],
+      "title": "Error budget remaining",
+      "type": "stat"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "platform-zero",
+    "tier-2",
+    "owner-platform-team"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "utc",
+  "title": "demo-api",
+  "uid": "b8177311eb1224c6",
+  "version": 1
+}

@@ -25,6 +25,13 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.runtime.port }}
+          {{- if .Values.runtime.env }}
+          env:
+            {{- range .Values.runtime.env }}
+            - name: {{ .name }}
+              value: "{{ .value }}"
+            {{- end }}
+          {{- end }}
           resources:
             requests:
               cpu: {{ .Values.runtime.resources.requests.cpu }}

@@ -30,6 +30,7 @@ runtime:
   probes:
     readiness: /healthz/ready
     liveness:  /healthz/live
+  env: []                     # [{name, value}] — always present, [] if unused
 
 slo:
   availability: 99.9          # percent, over the window
@@ -99,8 +100,16 @@ No Kubernetes manifests written. No dashboard requested. No monitoring ticket fi
 
 ## Versioning
 
-The manifest carries `apiVersion: platform/v1`. When the contract changes — a new
-required field, a new rollback strategy — the version increments and `platformctl`
-supports both versions during the migration window. Breaking the contract silently
-across a fleet of services is how platform teams lose the trust of their users, and
-trust is the only reason anyone stays on the golden path.
+The manifest carries `apiVersion: platform/v1`. The version increments on a *breaking*
+contract change — a field that renames or repurposes existing semantics, a rollback
+strategy that replaces `gitops-revert` — and `platformctl` supports both versions during
+the migration window.
+
+Adding a required field with a safe, scaffolded default (`runtime.env: []`, added this
+session) is additive, not breaking: existing manifests pick it up with the same one-line
+`env: []` that `platformctl init` now scaffolds for new ones, not a version migration.
+The distinction matters — treating every required-field addition as a breaking change
+would make the contract too rigid to extend; treating none of them as a version bump is
+how a platform breaks a fleet of services silently. Breaking the contract silently is how
+platform teams lose the trust of their users, and trust is the only reason anyone stays on
+the golden path.

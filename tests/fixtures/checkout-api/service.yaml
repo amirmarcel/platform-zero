@@ -14,6 +14,7 @@ runtime:
   probes:
     readiness: /healthz/ready
     liveness: /healthz/live
+  env: []
 slo:
   availability: 99.9
   latency_p99_ms: 300

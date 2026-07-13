@@ -1,0 +1,12 @@
+apiVersion: v2
+name: observability
+description: >-
+  Wraps the platformctl-rendered Prometheus rules (rules/*.yaml) and Grafana
+  dashboards (dashboards/*.json) into the PrometheusRule CRs and
+  grafana_dashboard ConfigMaps that kube-prometheus-stack actually watches.
+  This chart does not generate rule or dashboard content — platformctl render
+  does that. It only wraps the existing files so ArgoCD can sync them without
+  a manual kubectl apply.
+type: application
+version: 0.1.0
+appVersion: "1.0"

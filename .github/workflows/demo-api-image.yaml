@@ -1,0 +1,49 @@
+name: demo-api-image
+
+# CI-build path: publishes a commit-sha-tagged image on every push to main
+# that touches demo-api, plus workflow_dispatch for a manual first publish.
+# Release tags (demo-api-v*) are handled by demo-api-release.yaml instead —
+# a tag push doesn't satisfy `branches: [main]`, and gating a release build
+# on `paths` is fragile (a tag on an older commit can show an empty diff
+# against those paths), so the two triggers are kept in separate workflows
+# rather than composed under one `push:`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "examples/demo-api/**"
+      - ".github/workflows/demo-api-image.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/demo-api
+          tags: |
+            type=sha,format=long,prefix=
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: examples/demo-api
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

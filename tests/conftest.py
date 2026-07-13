@@ -20,6 +20,7 @@ VALID_MANIFEST = {
             "readiness": "/healthz/ready",
             "liveness": "/healthz/live",
         },
+        "env": [],
     },
     "slo": {
         "availability": 99.9,
