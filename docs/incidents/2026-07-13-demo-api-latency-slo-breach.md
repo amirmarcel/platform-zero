@@ -84,33 +84,13 @@ reported `DEGRADED` 18 seconds before the confirmed transition (11:59 →
 
 ## Root cause
 
-The service manifest is the single source of truth for both the service's *behavior*
-(`runtime.env`) and its *contract* (`slo.latency_p99_ms`). Nothing compares the two.
+I set LATENCY_MS to "600" in services/demo-api/service.yaml. The service sleeps that long on every /work request. The same file declares slo.latency_p99_ms: 500. The manifest promised 500ms and configured 600ms, and nothing in the platform noticed the contradiction.
 
-A change setting `LATENCY_MS: "600"` in a service whose declared SLO is 500ms is
-internally contradictory — the manifest declares a latency target that the same
-manifest guarantees will be violated. Every validation layer accepted it:
+Every gate passed, and each was correct to pass. platformctl validate checks the contract's ten rules (owner, immutable tag, resource bounds, runbook existence, name grammar, SLO bounds) and "600" violates none of them; it's a valid string in a valid env entry. The drift check passed because the renderer faithfully rendered what it was given. promtool and kubeconform passed because the generated rules and manifests were structurally sound. All 100 unit tests passed because nothing in the platform was broken. The configuration was well-formed. It was just wrong.
 
-- **`platformctl validate`** — passed. This runs the full contract rule set, not
-  just JSON-schema checks: owning team exists, image tag is immutable, resource
-  limits ≥ requests, the runbook file exists, `name` matches RFC 1123 grammar, and
-  `slo.availability` is in `(0, 100)`. None of those rules has any way to know that
-  `runtime.env`'s `LATENCY_MS` value relates to `slo.latency_p99_ms` — `env` is
-  just a list of `{name, value}` strings, and `"600"` is a valid one.
-- **Drift check** — passed. The rendered artifacts matched the manifest exactly.
-- **`promtool check rules`** — passed. The generated Prometheus rules were valid.
-- **`kubeconform`** — passed. All 7 rendered Kubernetes resources were schema-valid.
-- **Unit tests (100)** — passed. Nothing was broken.
+No additional validation rule would have caught this in the general case. LATENCY_MS is legible only because this is a demo service whose knobs the platform happens to understand. A real service's CACHE_TTL, POOL_SIZE, or MAX_WORKERS are opaque strings, and the platform has no way to reason about what changing one of them does to latency, throughput, or an SLO. The failure is semantic; every gate upstream of deployment is syntactic.
 
-This is not a gap that better validation closes in the general case. The platform
-cannot know what an arbitrary environment variable does. `LATENCY_MS` happens to be
-legible because it's a demo knob; a real service's `CACHE_TTL` or `POOL_SIZE` would
-be opaque to the same analysis.
-
-**The correct read is that this is what SLOs are for.** Static validation proves a
-config is *well-formed*. Only production, measured against a declared objective,
-proves it is *correct*. The alert that caught this was generated from the same
-manifest that broke it — which is the design working as intended.
+What caught it was the SLO: DemoApiLatencyP99High, generated from slo.latency_p99_ms: 500 in the same manifest that contained the bad value. Nothing else did. ArgoCD reported Synced / Healthy throughout, because the desired state was deployed and the probes passed. platformctl status reported image=v0.1.0 throughout, because the image never changed. Three systems all correctly reporting "fine" while the service was running 150x over its latency budget. Static validation proves a deployment is well-formed; only production, measured against a declared objective, proves it is correct.
 
 ## How it was fixed
 
