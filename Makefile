@@ -36,9 +36,10 @@ platform-install:
 ## a __ARGOCD_REPO_URL__ placeholder, substituted here from
 ## platform/config.yaml; nothing on disk is modified.
 platform-bootstrap:
-	@REPO_URL=$$(python3 -c "import yaml; print(yaml.safe_load(open('platform/config.yaml'))['argocd']['repo_url'])"); \
+	@REPO_URL=$$(grep -A1 '^argocd:' platform/config.yaml | grep 'repo_url:' | sed 's/.*repo_url:[[:space:]]*//'); \
+	test -n "$$REPO_URL" || { echo "error: argocd.repo_url not found in platform/config.yaml"; exit 1; }; \
 	sed "s|__ARGOCD_REPO_URL__|$$REPO_URL|g" argocd/root-app.yaml | kubectl apply -f -
-
 ## cluster-down: tear down the kind cluster.
+
 cluster-down:
 	kind delete cluster --name $(CLUSTER_NAME)

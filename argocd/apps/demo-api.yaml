@@ -16,7 +16,7 @@ spec:
       valueFiles:
       - values/demo-api.yaml
     path: helm/service
-    repoURL: https://github.com/example/platform-zero.git
+    repoURL: https://github.com/amirmarcel/platform-zero.git
     targetRevision: HEAD
   syncPolicy:
     automated:
