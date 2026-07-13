@@ -49,7 +49,7 @@ jobs:
           sudo mv kubeconform /usr/local/bin/kubeconform
           rm kubeconform.tar.gz
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: v4.2.3
 
@@ -80,19 +80,61 @@ jobs:
             -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/${CRD_CATALOG_SHA}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
           )
 
+          # kubeconform is silent on success unless told otherwise: with
+          # neither -summary nor -verbose it prints nothing for valid input
+          # AND nothing for empty input, so a broken pipeline upstream (a
+          # bad `helm template` invocation, an empty glob, ...) would exit 0
+          # looking identical to a real pass. -summary/-verbose make it
+          # print what it did; the resource-count check below turns
+          # "printed nothing" into a hard failure instead of a silent pass.
+          check() {
+            local label="$1"
+            local out
+            if ! out=$(kubeconform "${schema_args[@]}" -summary -verbose); then
+              echo "$out"
+              echo "::error::${label}: kubeconform reported invalid resources"
+              exit 1
+            fi
+            echo "$out"
+            local count
+            count=$(printf '%s\n' "$out" | sed -n -E 's/^Summary: ([0-9]+) resources? found.*/\1/p')
+            if [ -z "$count" ] || [ "$count" -eq 0 ]; then
+              echo "::error::${label}: kubeconform validated zero resources — check was not testing anything"
+              exit 1
+            fi
+          }
+
+          check_files() {
+            local label="$1"
+            shift
+            local out
+            if ! out=$(kubeconform "${schema_args[@]}" -summary -verbose "$@"); then
+              echo "$out"
+              echo "::error::${label}: kubeconform reported invalid resources"
+              exit 1
+            fi
+            echo "$out"
+            local count
+            count=$(printf '%s\n' "$out" | sed -n -E 's/^Summary: ([0-9]+) resources? found.*/\1/p')
+            if [ -z "$count" ] || [ "$count" -eq 0 ]; then
+              echo "::error::${label}: kubeconform validated zero resources — check was not testing anything"
+              exit 1
+            fi
+          }
+
           for values in helm/service/values/*.yaml; do
             name=$(basename "$values" .yaml)
             echo "== helm/service ($name) =="
-            helm template "$name" helm/service -f "$values" | kubeconform "${schema_args[@]}"
+            helm template "$name" helm/service -f "$values" | check "helm/service ($name)"
           done
 
           echo "== observability chart =="
-          helm template observability observability | kubeconform "${schema_args[@]}"
+          helm template observability observability | check "observability chart"
 
           apps=(argocd/apps/*.yaml)
           if [ "${#apps[@]}" -gt 0 ]; then
             echo "== argocd/apps =="
-            kubeconform "${schema_args[@]}" "${apps[@]}"
+            check_files "argocd/apps" "${apps[@]}"
           fi
 
       - name: Run tests
