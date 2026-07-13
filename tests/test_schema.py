@@ -59,3 +59,41 @@ def test_unknown_field_rejected() -> None:
     manifest["extraField"] = "not allowed"
     with pytest.raises(ValidationError):
         ServiceManifest.model_validate(manifest)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Checkout-Api",  # uppercase not allowed
+        "checkout_api",  # underscore not allowed
+        "-checkout-api",  # cannot start with a hyphen
+        "checkout-api-",  # cannot end with a hyphen
+        "checkout api",  # whitespace not allowed
+        "a" * 54,  # exceeds Helm's 53-char release-name limit
+    ],
+)
+def test_name_rejected_when_not_rfc1123_label(name: str) -> None:
+    manifest = valid_manifest()
+    manifest["name"] = name
+    with pytest.raises(ValidationError):
+        ServiceManifest.model_validate(manifest)
+
+
+def test_name_max_length_accepted() -> None:
+    manifest = valid_manifest()
+    manifest["name"] = "a" * 53
+    ServiceManifest.model_validate(manifest)
+
+
+def test_availability_of_100_rejected() -> None:
+    manifest = valid_manifest()
+    manifest["slo"]["availability"] = 100
+    with pytest.raises(ValidationError):
+        ServiceManifest.model_validate(manifest)
+
+
+def test_availability_of_zero_rejected() -> None:
+    manifest = valid_manifest()
+    manifest["slo"]["availability"] = 0
+    with pytest.raises(ValidationError):
+        ServiceManifest.model_validate(manifest)

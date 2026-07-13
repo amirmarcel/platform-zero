@@ -107,6 +107,19 @@ def test_validate_manifest_passes_for_valid_service(tmp_path: Path) -> None:
     assert parsed is not None
 
 
+def test_validate_manifest_rejects_name_that_violates_rfc1123_pattern(tmp_path: Path) -> None:
+    import yaml
+
+    data = valid_manifest()
+    data["name"] = "Bad_Name"
+    service_path = tmp_path / "service.yaml"
+    service_path.write_text(yaml.safe_dump(data))
+
+    parsed, errors = validate_manifest(service_path, TEAMS, tmp_path)
+    assert parsed is None
+    assert any("name" in e for e in errors)
+
+
 def test_validate_manifest_reports_multiple_failures(tmp_path: Path) -> None:
     import yaml
 

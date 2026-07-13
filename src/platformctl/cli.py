@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -6,8 +7,11 @@ import yaml
 
 from platformctl.config import get_argocd_repo_url, load_config
 from platformctl.render import check_drift, render_artifacts, render_observability_artifact, write_artifacts
-from platformctl.teams import load_teams
+from platformctl.schema import NAME_MAX_LENGTH, NAME_PATTERN
+from platformctl.teams import InvalidTeamNameError, load_teams
 from platformctl.validators import validate_manifest
+
+_NAME_RE = re.compile(NAME_PATTERN)
 
 app = typer.Typer(
     name="platformctl",
@@ -50,6 +54,9 @@ def _load_teams_or_exit(teams_path: Path) -> set[str]:
     except FileNotFoundError:
         typer.echo(f"error: {teams_path} not found", err=True)
         raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+    except InvalidTeamNameError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
 
 
 def _load_config_or_exit(config_path: Path) -> dict:
@@ -84,6 +91,14 @@ def init(
     root: Path = typer.Option(Path("."), "--root", help="Repository root."),
 ) -> None:
     """Scaffold services/<name>/service.yaml with tier-based defaults."""
+    if not _NAME_RE.match(name) or len(name) > NAME_MAX_LENGTH:
+        typer.echo(
+            f"error: name '{name}' is not a valid service name "
+            f"(must match {NAME_PATTERN} and be <={NAME_MAX_LENGTH} chars)",
+            err=True,
+        )
+        raise typer.Exit(code=USAGE_ERROR_EXIT_CODE)
+
     teams = _load_teams_or_exit(root / "platform" / "teams.yaml")
     if owner not in teams:
         typer.echo(

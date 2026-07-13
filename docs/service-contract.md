@@ -63,6 +63,9 @@ is a standard. Each rule below maps to the mechanism that actually enforces it.
 | 8 | A **runbook** that the alert links to | `platformctl validate` — fails if the referenced file does not exist |
 | 9 | A **rollback strategy** | Schema enum; v1 supports `gitops-revert` only |
 | 10 | **No drift** between manifest and deployed artifacts | CI regenerates all derived files and fails on diff |
+| 11 | A **name** that is valid Kubernetes/Helm identity | Schema — RFC 1123 label grammar, ≤53 chars (Helm's release-name limit); rejected, not sanitized, since `name` *is* the ArgoCD Application, namespace, Helm release, and object names |
+| 12 | An **owning team** with a valid label value | `platformctl validate`/`init`/`render` — `platform/teams.yaml` names must be valid Kubernetes label values (≤63 chars, alphanumeric start/end, interior `-_.`), since `owner` is rendered as the `platform.io/owner` label |
+| 13 | An **availability SLO strictly between 0 and 100** | Schema — `100` yields a zero error budget (division by zero in the budget panel, both burn-rate alerts always firing); `0` is likewise meaningless |
 
 Rule 10 is the one that makes the other nine hold. Without it, the standard erodes the
 first time someone hand-edits a rendered manifest to ship a hotfix.

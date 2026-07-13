@@ -61,6 +61,18 @@ def test_validate_missing_teams_file_is_usage_error(tmp_path: Path) -> None:
     assert result.exit_code == 2
 
 
+def test_validate_rejects_name_that_violates_rfc1123_pattern(tmp_path: Path) -> None:
+    manifest = valid_manifest()
+    manifest["name"] = "Bad_Name"
+    root = _make_repo(tmp_path, manifest)
+
+    result = runner.invoke(app, ["validate", "Bad_Name", "--root", str(root)])
+
+    assert result.exit_code == 1
+    assert "FAIL Bad_Name" in result.output
+    assert "name" in result.output.lower()
+
+
 def test_validate_all_services_reports_each(tmp_path: Path) -> None:
     root = _make_repo(tmp_path, valid_manifest())
 

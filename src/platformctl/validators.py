@@ -14,6 +14,9 @@
  9 | rollback strategy is gitops-revert        | schema.Operations.rollback (Literal)
 10 | no drift between manifest and artifacts   | CI: `platformctl render` + `git diff --exit-code`
    |                                           | (out of scope this session — render is not implemented)
+11 | name is a valid RFC 1123 label, <=53 chars | schema.ServiceManifest.name (Field pattern + max_length)
+12 | owning team is a valid label value        | teams.load_teams (raises InvalidTeamNameError)
+13 | availability SLO is strictly in (0, 100)  | schema.Slo.availability (Field gt/lt)
 
 Rules 7 and 10 are satisfied structurally by the render/CI pipeline, not by
 anything `validate` can check from the manifest alone, so there is nothing

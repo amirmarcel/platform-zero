@@ -65,6 +65,18 @@ def test_init_unknown_owner_is_usage_error(tmp_path: Path) -> None:
     assert not (root / "services" / "checkout-api").exists()
 
 
+def test_init_invalid_name_is_usage_error(tmp_path: Path) -> None:
+    root = _init_root(tmp_path)
+
+    result = runner.invoke(
+        app, ["init", "Bad_Name", "--owner", "platform-team", "--tier", "3", "--root", str(root)]
+    )
+
+    assert result.exit_code == 2
+    assert not (root / "services" / "Bad_Name").exists()
+    assert not (root / "docs" / "runbooks" / "Bad_Name.md").exists()
+
+
 def test_init_refuses_to_overwrite_existing_manifest(tmp_path: Path) -> None:
     root = _init_root(tmp_path)
     runner.invoke(app, ["init", "checkout-api", "--owner", "payments-team", "--root", str(root)])
