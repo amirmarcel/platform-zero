@@ -28,22 +28,36 @@ reading further.
 
 ## Timeline
 
-All timestamps UTC. One line per event; link the alert, PR, commit, or
-dashboard panel where relevant instead of re-describing it in prose.
+State the timezone explicitly in the table header — UTC is preferred since
+responders may be in different zones, but if the incident was worked and is
+being reported in a single zone, label that zone plainly rather than
+converting (or silently not converting) to UTC. One line per event; link
+the alert, PR, commit, or dashboard panel where relevant instead of
+re-describing it in prose. `Elapsed` (time since the first row) is optional
+— include it when the interval between events matters as much as the
+wall-clock time.
 
-| Time (UTC) | Event |
-|---|---|
-| | Change merged/deployed (the actual root cause, once known — fill in retroactively) |
-| | Alert fires: `<AlertName>` — detection |
-| | Responder acknowledges |
-| | Impact confirmed via dashboard/query |
-| | Root cause identified |
-| | Mitigation applied (e.g. `git revert` pushed) — mitigation |
-| | ArgoCD sync completes, alert clears — resolution |
+| Time (<timezone, e.g. UTC>) | Event | Elapsed (optional) |
+|---|---|---|
+| | Change merged/deployed (the actual root cause, once known — fill in retroactively) | |
+| | Alert fires: `<AlertName>` — detection | |
+| | Responder acknowledges | |
+| | Impact confirmed via dashboard/query | |
+| | Root cause identified | |
+| | Mitigation applied (e.g. `git revert` pushed) — mitigation | |
+| | ArgoCD sync completes, alert clears — resolution | |
 
-- **Time to detect** (change → alert fires):
+- **Time to detect** (change merged/deployed → alert fires):
 - **Time to mitigate** (alert fires → mitigation pushed):
 - **Time to resolve** (alert fires → alert clears):
+
+These three definitions are fixed so incidents stay comparable to each
+other. If something about this incident makes one of them misleading on its
+own — e.g. a broken load generator meant there was no traffic, and
+therefore nothing for the alert to fire on, for part of the window — report
+the literal metric anyway, and add the confound plus any better-fitted
+supplementary metric alongside it. Don't replace the standard metric with a
+differently-defined one under the same name.
 
 ## Root cause
 
@@ -83,8 +97,11 @@ took longer than it should have.
 ## Action items
 
 Every item has an owner and is either a follow-up issue link or a specific
-next step — "investigate further" is not an action item.
+next step — "investigate further" is not an action item. `Priority`
+reflects urgency; `Status` reflects actual progress and starts as
+"not started" for every item in a freshly-written postmortem — don't skip
+the column just because the postmortem is new.
 
-| Action | Owner | Status |
-|---|---|---|
-| | | not started / in progress / done |
+| # | Action | Owner | Priority | Status |
+|---|---|---|---|---|
+| | | | High / Medium / Low | not started / in progress / done |
