@@ -20,7 +20,7 @@ runtime:
     liveness: /healthz/live
   env:
     - name: LATENCY_MS
-      value: "0"
+      value: "600"        # was "0" — SLO is 500ms
     - name: ERROR_RATE
       value: "0.0"
 slo:
